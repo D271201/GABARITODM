@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Relatório de Desempenho</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc;
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .chart-container {
+            position: relative;
+            height: 350px;
+            max-height: 400px;
+            width: 100%;
+        }
+        .recommendation-list li::before {
+            content: '❌';
+            margin-right: 0.75rem;
+        }
+        .strength-list li::before {
+            content: '✅';
+            margin-right: 0.75rem;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+        <header class="text-center mb-8">
+            <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+                 <h1 class="text-3xl md:text-4xl font-extrabold text-blue-600">Relatório de Desempenho Analítico</h1>
+                 <button id="copy-button" class="hidden bg-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm">
+                    Copiar Relatório
+                </button>
+            </div>
+            <p class="mt-2 text-gray-600">Insira o seu e-mail para ver a sua análise completa do último simulado.</p>
+        </header>
+
+        <div id="form-section" class="card max-w-lg mx-auto">
+            <div class="flex flex-col sm:flex-row gap-4">
+                <input type="email" id="email-input" placeholder="Digite o seu e-mail" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="fetch-button" class="w-full sm:w-auto bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                    Buscar Relatório
+                </button>
+            </div>
+        </div>
+
+        <div id="loading-section" class="text-center py-12 hidden">
+            <p class="text-lg text-gray-600">A buscar o seu relatório...</p>
+        </div>
+
+        <div id="error-section" class="text-center py-12 hidden">
+            <p class="text-lg text-red-600 font-semibold"></p>
+        </div>
+
+        <div id="report-section" class="hidden mt-8">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div class="card text-center">
+                    <h3 class="text-lg font-semibold text-gray-500">Nota Final</h3>
+                    <p id="nota-final" class="text-5xl font-bold text-blue-600 mt-2"></p>
+                </div>
+                <div class="card text-center">
+                    <h3 class="text-lg font-semibold text-gray-500">Total de Acertos</h3>
+                    <p id="total-acertos" class="text-5xl font-bold text-blue-600 mt-2"></p>
+                </div>
+                <div class="card text-center">
+                    <h3 class="text-lg font-semibold text-gray-500">A sua Posição na Turma</h3>
+                    <p id="ranking" class="text-5xl font-bold text-blue-600 mt-2"></p>
+                    <p id="total-alunos" class="text-sm text-gray-500"></p>
+                </div>
+                <div class="card text-center">
+                    <h3 class="text-lg font-semibold text-gray-500">Média da Turma</h3>
+                    <p id="media-turma" class="text-5xl font-bold text-gray-600 mt-2"></p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                 <div class="card">
+                    <h3 class="text-xl font-bold mb-4 text-center">Pontos Fortes</h3>
+                    <div id="pontos-fortes" class="text-gray-700 space-y-2"></div>
+                </div>
+                <div class="card">
+                    <h3 class="text-xl font-bold mb-4 text-center">Pontos a Melhorar</h3>
+                    <div id="recomendacoes" class="text-gray-700 space-y-2"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="text-xl font-bold text-center mb-4">O seu Desempenho por Disciplina</h3>
+                <div class="chart-container">
+                    <canvas id="disciplineChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WEB_APP_URL = 'COLE_AQUI_O_URL_DO_SEU_APP_DA_WEB';
+
+        const formSection = document.getElementById('form-section');
+        const loadingSection = document.getElementById('loading-section');
+        const errorSection = document.getElementById('error-section');
+        const reportSection = document.getElementById('report-section');
+        const fetchButton = document.getElementById('fetch-button');
+        const emailInput = document.getElementById('email-input');
+        const copyButton = document.getElementById('copy-button');
+        
+        let disciplineChart = null;
+        let currentReportData = null;
+
+        fetchButton.addEventListener('click', async () => {
+            const email = emailInput.value;
+            if (!email || !email.includes('@')) {
+                alert('Por favor, insira um e-mail válido.');
+                return;
+            }
+
+            fetchButton.disabled = true;
+            fetchButton.textContent = 'A buscar...';
+            formSection.classList.add('hidden');
+            reportSection.classList.add('hidden');
+            errorSection.classList.add('hidden');
+            loadingSection.classList.remove('hidden');
+            copyButton.classList.add('hidden');
+
+            try {
+                const response = await fetch(`${WEB_APP_URL}?email=${encodeURIComponent(email)}`);
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    currentReportData = result.data;
+                    displayReport(currentReportData);
+                } else {
+                    displayError(result.message);
+                }
+            } catch (err) {
+                displayError('Não foi possível ligar ao servidor. Verifique o URL do App da Web e a sua ligação à internet.');
+            } finally {
+                loadingSection.classList.add('hidden');
+                fetchButton.disabled = false;
+                fetchButton.textContent = 'Buscar Relatório';
+            }
+        });
+
+        copyButton.addEventListener('click', () => {
+            if (!currentReportData) return;
+
+            const { strengths } = parseDisciplineAnalysis(currentReportData.analiseDisciplinas);
+            const recommendationsText = currentReportData.recomendacoes.replace(/- /g, '\n- ');
+            const strengthsText = strengths.length > 0 
+                ? strengths.map(s => `- ${s.discipline}: ${s.percentage}% de acerto.`).join('\n')
+                : 'Nenhum ponto forte destacado.';
+
+            const reportString = `
+RELATÓRIO DE DESEMPENHO
+-----------------------------------
+- Nota Final: ${parseFloat(currentReportData.notaFinal).toFixed(1)}%
+- Total de Acertos: ${currentReportData.totalAcertos}
+- Posição na Turma: ${currentReportData.rank}º de ${currentReportData.totalStudents} alunos
+- Média da Turma: ${currentReportData.classAverage}%
+-----------------------------------
+PONTOS FORTES:
+${strengthsText}
+-----------------------------------
+PONTOS A MELHORAR:
+${recommendationsText}
+            `.trim();
+
+            const textarea = document.createElement('textarea');
+            textarea.value = reportString;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            copyButton.textContent = 'Copiado!';
+            setTimeout(() => {
+                copyButton.textContent = 'Copiar Relatório';
+            }, 2000);
+        });
+        
+        function displayError(message) {
+            errorSection.querySelector('p').textContent = message;
+            errorSection.classList.remove('hidden');
+            formSection.classList.remove('hidden');
+        }
+
+        function displayReport(data) {
+            document.getElementById('nota-final').textContent = `${parseFloat(data.notaFinal).toFixed(1)}%`;
+            document.getElementById('total-acertos').textContent = data.totalAcertos;
+            document.getElementById('ranking').textContent = `${data.rank}º`;
+            document.getElementById('total-alunos').textContent = `de ${data.totalStudents} alunos`;
+            document.getElementById('media-turma').textContent = `${data.classAverage}%`;
+
+            const { labels, percentages, strengths } = parseDisciplineAnalysis(data.analiseDisciplinas);
+
+            document.getElementById('recomendacoes').innerHTML = formatRecommendations(data.recomendacoes, data.questoesErradas);
+            document.getElementById('pontos-fortes').innerHTML = formatStrengths(strengths);
+
+            const ctx = document.getElementById('disciplineChart').getContext('2d');
+            if(disciplineChart) {
+                disciplineChart.destroy();
+            }
+            disciplineChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Seu Desempenho',
+                        data: percentages,
+                        fill: true,
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        pointBackgroundColor: 'rgb(59, 130, 246)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(59, 130, 246)'
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { display: true },
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                            ticks: { 
+                                backdropColor: 'transparent', 
+                                stepSize: 25,
+                                callback: function(value) { return value + '%' }
+                            }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            reportSection.classList.remove('hidden');
+            copyButton.classList.remove('hidden');
+        }
+
+        function parseDisciplineAnalysis(analysisString) {
+            const labels = [];
+            const percentages = [];
+            const strengths = [];
+            if (!analysisString) return { labels, percentages, strengths };
+            const parts = analysisString.split('|');
+            parts.forEach(part => {
+                const match = part.match(/([^:]+):\s*\d+\/\d+\s*\((\d+)%\)/);
+                if (match) {
+                    const discipline = match[1].trim();
+                    const percentage = parseInt(match[2], 10);
+                    labels.push(discipline);
+                    percentages.push(percentage);
+                    if (percentage >= 80) {
+                        strengths.push({ discipline, percentage });
+                    }
+                }
+            });
+            return { labels, percentages, strengths };
+        }
+        
+        function formatRecommendations(recString, wrongQuestions) {
+            if (!recString || recString.includes("Parabéns")) return `<p class="text-center">${recString}</p>`;
+            
+            const recs = recString.split('- ').filter(p => p.trim() !== '');
+            const questions = wrongQuestions ? wrongQuestions.split(',').map(q => q.trim()) : [];
+            
+            const listItems = recs.map((rec, index) => {
+                const questionId = questions[index] ? `<span class="font-bold text-red-600">[Questão ${questions[index]}]</span> ` : '';
+                return `<li>${questionId}${rec.trim()}</li>`;
+            }).join('');
+            
+            return `<ul class="recommendation-list mt-2 space-y-2 text-sm">${listItems}</ul>`;
+        }
+        
+        function formatStrengths(strengths) {
+            if (strengths.length === 0) {
+                return `<p class="text-center text-gray-500">Nenhum ponto forte destacado (acima de 80%). Continue a esforçar-se!</p>`;
+            }
+            const listItems = strengths.map(s => `<li><span class="font-bold">${s.discipline}:</span> ${s.percentage}% de acerto.</li>`).join('');
+            return `<ul class="strength-list mt-2 space-y-2 text-sm">${listItems}</ul>`;
+        }
+    </script>
+</body>
+</html>
